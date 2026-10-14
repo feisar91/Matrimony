@@ -1,7 +1,7 @@
 services:
   app:
     container_name: matrimony
-    image: ghcr.io/agent-squirrel/matrimony:${IMAGE_TAG:-latest}
+    image: ghcr.io/feisar91/matrimony:${IMAGE_TAG:-latest}
     # To build locally instead, replace the image line above with:
     # build:
     #   context: ..

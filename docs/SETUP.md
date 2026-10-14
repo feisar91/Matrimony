@@ -26,7 +26,7 @@ A generic, reusable Flask-based wedding website with admin control panel, RSVP t
 
 ```bash
 cd /opt
-git clone https://github.com/agent-squirrel/adamandizzie2026-generic wedding_app
+git clone https://github.com/feisar91/Matrimony wedding_app
 cd wedding_app
 ```
 

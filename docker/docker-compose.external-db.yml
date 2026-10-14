@@ -6,7 +6,7 @@
 
 services:
   app:
-    image: ghcr.io/agent-squirrel/matrimony:${IMAGE_TAG:-latest}
+    image: ghcr.io/feisar91/matrimony:${IMAGE_TAG:-latest}
     ports:
       - "${APP_PORT:-8000}:8000"
     environment:

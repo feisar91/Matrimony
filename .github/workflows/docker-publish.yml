@@ -31,7 +31,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ghcr.io/agent-squirrel/matrimony
+          images: ghcr.io/feisar91/matrimony
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=tag
