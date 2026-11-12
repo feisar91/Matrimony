@@ -110,7 +110,7 @@ Bob &amp; Carol White,bob@example.com,,</pre>
                 </td>
                 <td>
                     <form method="POST" action="{{ url_for('admin_rsvp_delete', rsvp_id=rsvp.id) }}"
-                          onsubmit="return confirm('Remove {{ rsvp.names }}? This cannot be undone.');">
+                          onsubmit='return confirm("Remove " + {{ rsvp.names|tojson }} + "? This cannot be undone.");'>
                         <button type="submit" style="padding:0.3rem 0.65rem;font-size:0.78rem;background:#fee2e2;color:#dc2626;border:1px solid #fecaca;border-radius:var(--radius-sm, 4px);cursor:pointer;font-family:inherit;">
                             Delete
                         </button>

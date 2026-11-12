@@ -6,6 +6,9 @@ services:
     envVars:
       - key: SECRET_KEY
         generateValue: true
+      # Required by the first-run setup wizard; find it in the Render dashboard.
+      - key: SETUP_TOKEN
+        generateValue: true
       - key: DATABASE_URL
         fromDatabase:
           name: matrimony-db

@@ -158,7 +158,7 @@ python migrate_from_yml.py
 
 ### Development
 ```bash
-python app.py  # debug=True, auto-reload enabled
+FLASK_DEBUG=1 python app.py  # debugger + auto-reload, listens on 127.0.0.1 only
 ```
 
 ### Production (using Gunicorn)

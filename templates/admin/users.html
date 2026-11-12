@@ -38,12 +38,12 @@
                     <td>{{ user.last_login.strftime('%b %d, %Y %H:%M') if user.last_login else 'Never' }}</td>
                     <td style="text-align: center;">
                         {% if user.id != current_user.id %}
-                        <form method="POST" style="display:inline;" onsubmit="return confirm('Delete admin {{ user.email }}? This cannot be undone.');">
+                        <form method="POST" style="display:inline;" onsubmit='return confirm("Delete admin " + {{ user.email|tojson }} + "? This cannot be undone.");'>
                             <input type="hidden" name="action" value="delete">
                             <input type="hidden" name="user_id" value="{{ user.id }}">
                             <button type="submit" class="btn btn-danger btn-sm">Delete</button>
                         </form>
-                        <button type="button" class="btn btn-sm btn-change-pw" onclick="openResetModal({{ user.id }}, '{{ user.email | e }}')">Change Password</button>
+                        <button type="button" class="btn btn-sm btn-change-pw" onclick='openResetModal({{ user.id }}, {{ user.email|tojson }})'>Change Password</button>
                         {% else %}
                         <span style="color: var(--admin-text-muted); font-size: 0.85rem;">-</span>
                         {% endif %}
