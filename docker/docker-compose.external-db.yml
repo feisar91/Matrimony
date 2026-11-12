@@ -11,6 +11,7 @@ services:
       - "${APP_PORT:-8000}:8000"
     environment:
       SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in your .env file}
+      SETUP_TOKEN: ${SETUP_TOKEN:-}
       # Supply either DATABASE_URL or the individual DB_* vars below
       DATABASE_URL: ${DATABASE_URL:-}
       DB_HOST: ${DB_HOST:-localhost}

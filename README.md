@@ -117,6 +117,8 @@ python app.py
 
 Open `http://localhost:5000`. The setup wizard will appear on first run to create your admin account and enter your wedding details.
 
+The development server listens on `127.0.0.1` only. Set `FLASK_DEBUG=1` for the debugger and auto-reload while developing - never on a reachable host, as the debugger allows code execution.
+
 **Running in production?** Use Gunicorn instead:
 
 ```bash

@@ -10,6 +10,7 @@ services:
       - "${APP_PORT:-8000}:8000"
     environment:
       SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in docker/.env}
+      SETUP_TOKEN: ${SETUP_TOKEN:-}
       DB_HOST: db
       DB_PORT: 5432
       DB_USER: ${DB_USER:-wedding_user}

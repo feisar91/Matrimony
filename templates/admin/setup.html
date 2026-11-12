@@ -196,6 +196,13 @@
             <h2 style="color: var(--primary-color); margin-bottom: 1.5rem;">Create Admin Account</h2>
             <form method="POST">
                 <input type="hidden" name="step" value="1">
+                {% if require_setup_token %}
+                <div class="form-group">
+                    <label for="setup_token">Setup Token</label>
+                    <input type="password" id="setup_token" name="setup_token" required autocomplete="off">
+                    <small style="color: #6c757d;">The <code>SETUP_TOKEN</code> value from your server's environment.</small>
+                </div>
+                {% endif %}
                 <div class="form-group">
                     <label for="email">Email Address</label>
                     <input type="email" id="email" name="email" required>

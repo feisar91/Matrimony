@@ -9,8 +9,11 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 import os
 import random
+import re
 import csv
 import secrets
+from html import escape as html_escape
+from urllib.parse import urlparse
 from io import StringIO, BytesIO
 from werkzeug.utils import secure_filename
 from functools import wraps
@@ -44,6 +47,8 @@ if not _secret_key:
     print("WARNING: SECRET_KEY env var not set - sessions will not persist across restarts. Set it in your .env file.")
 
 app.config['SECRET_KEY'] = _secret_key
+# Lax stops other sites from sending the session cookie on cross-site POSTs (basic CSRF defence).
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SQLALCHEMY_DATABASE_URI'] = _build_db_url()
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -379,6 +384,14 @@ def setup_required():
     """True when initial admin setup has not been completed yet."""
     return AdminUser.query.count() == 0
 
+@app.after_request
+def set_security_headers(response):
+    """Baseline browser hardening headers."""
+    response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    response.headers.setdefault('X-Frame-Options', 'SAMEORIGIN')
+    response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    return response
+
 @app.before_request
 def redirect_to_setup_if_needed():
     """Redirect any request to the setup wizard until an admin account exists."""
@@ -407,24 +420,42 @@ def generate_unique_code():
         if not existing:
             return code
 
+def _safe_color(value, default):
+    """Return value if it is a plain hex colour, otherwise default."""
+    return value if value and re.fullmatch(r'#[0-9A-Fa-f]{3,8}', value) else default
+
+
+def is_safe_redirect_target(target):
+    """Only allow redirects to a path on this site (blocks //evil.com, https://evil.com, /\\evil.com)."""
+    if not target or not target.startswith('/') or target.startswith('//') or '\\' in target:
+        return False
+    parsed = urlparse(target)
+    return not parsed.scheme and not parsed.netloc
+
+
 def build_wedding_email_template(recipient_name, heading, message_text='', include_disclaimer=True):
     """Build a wedding-themed email body used for guest communication."""
     wed_cfg = get_wedding_config()
     if not wed_cfg:
         return "<p>Error loading wedding configuration</p>"
     
-    bride = wed_cfg.bride
-    groom = wed_cfg.groom
-    wedding_date = wed_cfg.wedding_date
-    venue = wed_cfg.venue
-    city = wed_cfg.city
-    primary_color = wed_cfg.primary_color or '#6D4846'
-    accent_color = wed_cfg.accent_color or '#9C5B5B'
-    gold_accent = wed_cfg.gold_accent or '#D4AF37'
+    # Everything interpolated below is escaped: guest names arrive from the
+    # public Save the Date form and must not be able to inject HTML into emails.
+    esc = html_escape
+    recipient_name = esc(recipient_name)
+    heading = esc(heading)
+    bride = esc(wed_cfg.bride)
+    groom = esc(wed_cfg.groom)
+    wedding_date = esc(wed_cfg.wedding_date)
+    venue = esc(wed_cfg.venue)
+    city = esc(wed_cfg.city)
+    primary_color = _safe_color(wed_cfg.primary_color, '#6D4846')
+    accent_color = _safe_color(wed_cfg.accent_color, '#9C5B5B')
+    gold_accent = _safe_color(wed_cfg.gold_accent, '#D4AF37')
 
     message_section = ''
     if message_text.strip():
-        formatted_message = message_text.strip().replace('\n', '<br>')
+        formatted_message = esc(message_text.strip()).replace('\n', '<br>')
         message_section = f"""
                             <p style=\"margin: 0 0 20px 0; font-size: 16px;\">{formatted_message}</p>
 """
@@ -558,7 +589,7 @@ def require_site_password(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not check_site_password():
-            return redirect(url_for('site_login', next=request.url))
+            return redirect(url_for('site_login', next=request.full_path.rstrip('?')))
         return f(*args, **kwargs)
     return decorated_function
 
@@ -571,10 +602,13 @@ def site_login():
     if not wed_cfg or not wed_cfg.site_password_protected:
         return redirect(url_for('home'))
     
+    next_page = request.args.get('next')
+    if not is_safe_redirect_target(next_page):
+        next_page = url_for('home')
+
     # If already authenticated, redirect to next page or home
     if session.get('site_authenticated', False):
-        next_page = request.args.get('next')
-        return redirect(next_page if next_page else url_for('home'))
+        return redirect(next_page)
     
     if request.method == 'POST':
         password = request.form.get('password', '')
@@ -583,13 +617,13 @@ def site_login():
         if stored.startswith(('scrypt:', 'pbkdf2:')):
             authenticated = check_password_hash(stored, password)
         else:
-            authenticated = password == stored
+            # Legacy plaintext value from older installs; constant-time compare.
+            authenticated = bool(stored) and secrets.compare_digest(password.encode(), stored.encode())
 
         if authenticated:
             session['site_authenticated'] = True
             session.permanent = True  # Keep session across browser restarts
-            next_page = request.args.get('next')
-            return redirect(next_page if next_page else url_for('home'))
+            return redirect(next_page)
         else:
             flash('Incorrect password. Please try again.', 'error')
     
@@ -946,7 +980,7 @@ def rsvp_confirm(code):
                         heading='Thank You for Your RSVP!',
                         message_text=(
                             "Thank you so much for confirming your RSVP! We are thrilled that "
-                            "you'll be joining us to celebrate our special day.<br><br>"
+                            "you'll be joining us to celebrate our special day.\n\n"
                             "We can't wait to see you there and share this joyful occasion with you!"
                         ),
                     )
@@ -1348,39 +1382,61 @@ def admin_setup():
     # If setup is complete, redirect to admin login
     if admin_count > 0 and wedding_config_count > 0:
         return redirect(url_for('admin_login'))
-    
+
+    # Once an admin exists, the remaining setup steps belong to that admin only.
+    # Without this, anyone could re-submit step 1 and create their own admin
+    # account while the wedding config is still missing.
+    if admin_count > 0 and not current_user.is_authenticated:
+        flash('Please log in to finish setting up your wedding.', 'error')
+        return redirect(url_for('admin_login'))
+
+    setup_token = os.environ.get('SETUP_TOKEN', '')
+
     if request.method == 'POST':
         step = request.form.get('step', '1')
-        
+
         # Step 1: Create Admin User
         if step == '1':
+            if admin_count > 0:
+                return redirect(url_for('admin_setup'))
+
+            if setup_token and not secrets.compare_digest(
+                    request.form.get('setup_token', '').encode(), setup_token.encode()):
+                flash('Invalid setup token', 'error')
+                return render_template('admin/setup.html', step=1, require_setup_token=True)
+
             email = request.form.get('email', '').strip()
             password = request.form.get('password', '').strip()
             confirm_password = request.form.get('confirm_password', '').strip()
             
             if not email or not password or not confirm_password:
                 flash('Please fill in all fields', 'error')
-                return render_template('admin/setup.html', step=1)
+                return render_template('admin/setup.html', step=1, require_setup_token=bool(setup_token))
             
             if password != confirm_password:
                 flash('Passwords do not match', 'error')
-                return render_template('admin/setup.html', step=1)
+                return render_template('admin/setup.html', step=1, require_setup_token=bool(setup_token))
             
             if AdminUser.query.filter_by(email=email).first():
                 flash('Email already registered', 'error')
-                return render_template('admin/setup.html', step=1)
+                return render_template('admin/setup.html', step=1, require_setup_token=bool(setup_token))
             
             # Create admin user
             admin = AdminUser(email=email)
             admin.set_password(password)
             db.session.add(admin)
             db.session.commit()
-            
+
+            # Log the new admin in so step 2 is tied to their session.
+            login_user(admin)
             flash('Admin user created! Now let\'s set up your wedding details.', 'success')
-            return render_template('admin/setup.html', step=2)
-        
-        # Step 2: Create Wedding Config
+            return redirect(url_for('admin_setup'))
+
+        # Step 2: Create Wedding Config (only the logged-in admin, checked above)
         elif step == '2':
+            if admin_count == 0:
+                return redirect(url_for('admin_setup'))
+
             bride = request.form.get('bride', '').strip()
             groom = request.form.get('groom', '').strip()
             wedding_date_str = request.form.get('wedding_date', '')
@@ -1442,6 +1498,7 @@ def admin_setup():
         step = 2
 
     return render_template('admin/setup.html', step=step,
+                           require_setup_token=bool(setup_token),
                            default_tz=os.environ.get('DEFAULT_TIMEZONE', 'UTC'))
 
 @app.route('/admin/login', methods=['GET', 'POST'])
@@ -1450,21 +1507,24 @@ def admin_login():
     if setup_required():
         return redirect(url_for('admin_setup'))
 
+    # Send admins back to the wizard if wedding setup was never finished.
+    post_login_endpoint = 'admin_dashboard' if get_wedding_config() else 'admin_setup'
+
     if current_user.is_authenticated:
-        return redirect(url_for('admin_dashboard'))
-    
+        return redirect(url_for(post_login_endpoint))
+
     if request.method == 'POST':
         email = request.form.get('email', '').strip()
         password = request.form.get('password', '').strip()
-        
+
         admin = AdminUser.query.filter_by(email=email).first()
-        
+
         if admin and admin.check_password(password):
             admin.last_login = datetime.utcnow()
             db.session.commit()
             login_user(admin)
             flash('Welcome back!', 'success')
-            return redirect(url_for('admin_dashboard'))
+            return redirect(url_for(post_login_endpoint))
         else:
             flash('Invalid email or password', 'error')
     
@@ -2067,4 +2127,11 @@ def admin_change_password():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    # Development server only - use gunicorn in production.
+    # The Werkzeug debugger allows code execution, so it is opt-in and the
+    # server listens on localhost unless HOST is set explicitly.
+    app.run(
+        debug=os.environ.get('FLASK_DEBUG', '').lower() in ('1', 'true', 'yes'),
+        host=os.environ.get('HOST', '127.0.0.1'),
+        port=int(os.environ.get('PORT', 5000)),
+    )

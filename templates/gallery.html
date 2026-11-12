@@ -188,7 +188,7 @@
                     <img src="{{ url_for('static', filename='uploads/photos/' + submission.filename) }}" 
                          alt="{{ submission.challenge }}"
                          class="gallery-image"
-                         onclick="openLightbox('{{ url_for('static', filename='uploads/photos/' + submission.filename) }}', '{{ submission.challenge }}', '{{ submission.guest_name }}')">
+                         onclick='openLightbox({{ url_for("static", filename="uploads/photos/" + submission.filename)|tojson }}, {{ submission.challenge|tojson }}, {{ submission.guest_name|tojson }})'>
                     <div class="gallery-info">
                         <div class="gallery-challenge">{{ submission.challenge }}</div>
                         <div class="gallery-author">by {{ submission.guest_name }}</div>

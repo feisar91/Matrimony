@@ -201,7 +201,7 @@
         <img src="{{ url_for('static', filename='uploads/photos/' + submission.filename) }}"
              alt="{{ submission.challenge }}"
              class="photo-card-img"
-             onclick="openLightbox('{{ url_for('static', filename='uploads/photos/' + submission.filename) | e }}', '{{ submission.challenge | e }}', '{{ submission.guest_name | e }}')">
+             onclick='openLightbox({{ url_for("static", filename="uploads/photos/" + submission.filename)|tojson }}, {{ submission.challenge|tojson }}, {{ submission.guest_name|tojson }})'>
         <div class="photo-card-body">
             <div class="photo-card-challenge" title="{{ submission.challenge }}">{{ submission.challenge }}</div>
             <div class="photo-card-meta">
@@ -216,7 +216,7 @@
                 View Full
             </a>
             <button type="button" class="btn-icon btn-delete"
-                    onclick="confirmDelete({{ submission.id }}, '{{ submission.guest_name | e }}')">
+                    onclick='confirmDelete({{ submission.id }}, {{ submission.guest_name|tojson }})'>
                 <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
                 Delete
             </button>
